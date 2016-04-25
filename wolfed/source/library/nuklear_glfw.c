@@ -67,6 +67,13 @@ void nk_glfw_shutdown(void) {
     nk_free(&nk_glfw.context);
 }
 
+void nk_glfw_sizes(int *width, int *height, int *pixelWidth, int *pixelHeight) {
+    if(width)  { *width  = nk_glfw.width;  }
+    if(height) { *height = nk_glfw.height; }
+    if(pixelWidth)  { *pixelWidth  = nk_glfw.pixelWidth;  }
+    if(pixelHeight) { *pixelHeight = nk_glfw.pixelHeight; }
+}
+
 //==================================================================================================================================
 void nk_glfw_font_begin(struct nk_font_atlas **atlas) {
     nk_font_atlas_init_default(&nk_glfw.fonts);
@@ -133,7 +140,7 @@ static void nk_glfw_clipboard_paste(nk_handle user, struct nk_text_edit *edit) {
 #define GLFW_KEY(x) (glfwGetKey(nk_glfw.window, GLFW_KEY_##x) == GLFW_PRESS)
 #define GLFW_BTN(x) (glfwGetMouseButton(nk_glfw.window, GLFW_MOUSE_BUTTON_##x) == GLFW_PRESS)
 
-void nk_glfw_frame_input(void) {
+void nk_glfw_input(void) {
     nk_input_begin(&nk_glfw.context);
     for(uint32_t idx=0; idx<nk_glfw.textLength; idx++) { nk_input_unicode(&nk_glfw.context, nk_glfw.textBuffer[idx]); }
 
@@ -182,7 +189,7 @@ void nk_glfw_frame_input(void) {
 
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-void nk_glfw_frame_render(void) {
+void nk_glfw_render(void) {
     glPushAttrib(GL_ENABLE_BIT);
     glPushClientAttrib(GL_CLIENT_VERTEX_ARRAY_BIT);
     glEnable(GL_BLEND);

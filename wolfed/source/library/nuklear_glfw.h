@@ -15,8 +15,10 @@ void nk_glfw_shutdown(void);
 void nk_glfw_font_begin(struct nk_font_atlas **atlas);
 void nk_glfw_font_end(void);
 
-void nk_glfw_frame_input(void);
-void nk_glfw_frame_render(void);
+void nk_glfw_input(void);
+void nk_glfw_render(void);
+
+void nk_glfw_sizes(int *width, int *height, int *pixelWidth, int *pixelHeight);
 
 void nk_glfw_callback_char(GLFWwindow *window, unsigned int codepoint);
 void nk_glfw_callback_scroll(GLFWwindow *window, double xOffset, double yOffset);

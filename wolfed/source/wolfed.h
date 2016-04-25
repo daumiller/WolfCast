@@ -1,82 +1,69 @@
-extern "C" {
-    #include "texture.h"
-    #include "map.h"
-}
-#include "imgui/imguiGlfw.h"
+#ifndef WOLFED_H
+#define WOLFED_H
+
+#include <stdbool.h>
+#include <GLFW/glfw3.h>
+#include "library/nuklear.h"
+#include "../../shared/map.h"
 
 //==================================================================================================================================
-#define TOOL_EDIT     0
-#define TOOL_PLACE    1
-#define TOOL_INSPECT  2
-#define TOOL_SETTINGS 3
+#define STARTUP_WIDTH  960
+#define STARTUP_HEIGHT 720
+#define PROGRAM_NAME   "WolfEd"
 
-#define PLACE_ERASE   4
-#define PLACE_DOOR    5
-#define PLACE_SPAWN   6
-#define PLACE_KEY     7
-#define PLACE_WEAPON  8
-#define PLACE_AMMO    9
-#define PLACE_ENEMY  10
+//==================================================================================================================================
+typedef enum {
+    TOOL_EDIT     = 0,
+    TOOL_PLACE    = 1,
+    TOOL_INSPECT  = 2,
+    TOOL_SETTINGS = 3
+} ToolType;
+
+typedef enum {
+    PLACE_ERASE  =  4,
+    PLACE_DOOR   =  5,
+    PLACE_SPAWN  =  6,
+    PLACE_KEY    =  7,
+    PLACE_WEAPON =  8,
+    PLACE_AMMO   =  9,
+    PLACE_ENEMY  = 10
+} PlaceType;
 
 //==================================================================================================================================
 typedef struct {
     GLFWwindow *window;
-    ImVec4 windowBgColor;
-    int width, height;
-    int fbWidth, fbHeight;
-    bool textEditing;
-    void (*ifNotTextEditing)();
-    const char *errorMessage;
-    char *mapPath;
-    bool showDialogOpen, showDialogSaveAs, showDialogError;
+    struct nk_context *nuklear;
 
-    TextureSet *tiles;
-    GLuint *icons;
-
-    int toolSelected;
-    int editTileSelected;
-    int placeSelected;
-    int inspectTileX, inspectTileY;
-
-    int tileDataLeft, tileDataTop, tileDataWidth, tileDataHeight;
-    int tileViewLeft, tileViewTop, tileViewWidth, tileViewHeight;
+    GLuint *icons, *textures;
+    const char *mapPath;
     Map *map;
-} State;
+
+    ToolType      selectedTool;
+    unsigned char selectedEdit;
+    PlaceType     selectedPlace;
+    int selectedInspectX, selectedInspectY;
+
+    int viewLeft, viewTop, viewWidth, viewHeight;
+    int dataLeft, dataTop, dataWidth, dataHeight;
+
+    bool isTextEditing;
+    int shownDialog;
+} WolfEdState;
 
 //==================================================================================================================================
-void HandleGlfwError(int code, const char *desc);
-void HandleResize(GLFWwindow *window, int fbWidth, int fbHeight);
-void HandleKeys(GLFWwindow* window, int key, int scancode, int action, int mods);
-void HandleOpen();
-void HandleOpenFile(const char *path);
-void HandleNew();
-void HandleSave();
-void HandleSaveAs();
-void HandleSaveAsFile(const char *path);
-void HandleExit();
-void HandleToolEdit();
-void HandleToolPlace();
-void HandleToolInspect();
-void HandleToolSettings();
-void HandleEditSelect(uint8 tile);
-void HandlePlaceSelect(uint8 place);
-void HandleCanvasData(int tileX, int tileY);
-void HandleCanvasView(int tileX, int tileY);
-void HandleViewOffset(int left, int right, int up, int down);
-void HandleViewOffsetLeft();
-void HandleViewOffsetRight();
-void HandleViewOffsetUp();
-void HandleViewOffsetDown();
+// main.c
+extern WolfEdState state;
 
 //==================================================================================================================================
-void DrawCanvas();
-void DrawSidebarMenu();
-void DrawSidebarStatus();
-void DrawSidebarTools();
-void DrawSidebarEdit();
-void DrawSidebarPlace();
-void DrawSidebarInspect();
-void DrawSidebarSettings();
-void DrawDialogOpen();
-void DrawDialogSaveAs();
-void DrawDialogError();
+// draw.c
+void DrawInit(void);
+void DrawUI(void);
+
+//==================================================================================================================================
+// event.c
+void EventMapLoad(const char *path);
+void EventMapNew(void);
+void EventMapSave(const char *path);
+
+
+#endif //WOLFED_H

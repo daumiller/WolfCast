@@ -1,68 +1,127 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <GLFW/glfw3.h>
 #include "library/nuklear_glfw.h"
+#include "../../shared/texture.h"
+#include "wolfed.h"
 
-#define STARTUP_WIDTH  960
-#define STARTUP_HEIGHT 720
+//==================================================================================================================================
+WolfEdState state;
 
+//==================================================================================================================================
+static bool InitNuklear(void);   static void CleanupNuklear(void);
+static bool InitResources(void); static void CleanupResources(void);
+static void MainLoop(void);
+
+//==================================================================================================================================
 int main(int argc, char ** argv) {
-    if(!glfwInit()) { printf("glfwInit() failed\n"); return -1; }
-    GLFWwindow *window = glfwCreateWindow(STARTUP_WIDTH, STARTUP_HEIGHT, "WolfEd", NULL, NULL);
-    glfwMakeContextCurrent(window);
+    memset(&state, 0, sizeof(WolfEdState));
 
-    struct nk_context *nuklear = nk_glfw_init(window, true, true);
+    if(!InitNuklear())   { return -1; }
+    if(!InitResources()) { return -1; }
+
+    (argc > 1) ? EventMapLoad(argv[1]) : EventMapNew();
+
+    DrawInit();
+    MainLoop();
+
+    CleanupResources();
+    CleanupNuklear();
+    return 0;
+}
+
+//==================================================================================================================================
+static void MainLoop() {
+    while(!glfwWindowShouldClose(state.window)) {
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glfwPollEvents();
+        nk_glfw_input();
+        DrawUI();
+        nk_glfw_render();
+        glfwSwapBuffers(state.window);
+    }
+}
+
+//==================================================================================================================================
+static bool InitNuklear() {
+    if(!glfwInit()) { fprintf(stderr, "ERROR: glfwInit() failed.\n"); return false; }
+    state.window = glfwCreateWindow(STARTUP_WIDTH, STARTUP_HEIGHT, PROGRAM_NAME, NULL, NULL);
+    glfwMakeContextCurrent(state.window);
+
+    state.nuklear = nk_glfw_init(state.window, true, false);
+    if(!state.nuklear) { fprintf(stderr, "ERROR: nk_glfw_init() failed.\n"); return false; }
+    glfwSetKeyCallback            (state.window, nk_glfw_callback_key);
+    glfwSetCharCallback           (state.window, nk_glfw_callback_char);
+    glfwSetScrollCallback         (state.window, nk_glfw_callback_scroll);
+    glfwSetFramebufferSizeCallback(state.window, nk_glfw_callback_resize);
+
     nk_glfw_font_begin(NULL);
     nk_glfw_font_end();
 
-    struct nk_color bgcolor = nk_rgb(28, 48, 62);
+    return true;
+}
 
-    while(!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        nk_glfw_frame_input();
-
-        {
-            struct nk_panel layout, colors;
-            static int angle, direction = 0;
-
-            if(nk_begin(nuklear, &layout, "WolfEd", nk_rect(50, 50, 235, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)) {
-                nk_layout_row_static(nuklear, 30, 80, 1);
-                if(nk_button_label(nuklear, "Okay", NK_BUTTON_DEFAULT)) { printf("Okay Then...\n"); }
-
-                nk_layout_row_dynamic(nuklear, 30, 2);
-                if(nk_option_label(nuklear, "Left",  direction == 0)) { direction = 0; }
-                if(nk_option_label(nuklear, "Right", direction == 1)) { direction = 1; }
-
-                nk_layout_row_dynamic(nuklear, 25, 1);
-                nk_property_int(nuklear, "Angle: ", 0, &angle, 360, 10, 1);
-
-                nk_layout_row_dynamic(nuklear, 20, 1);
-                nk_label(nuklear, "bgcolor: ", NK_TEXT_LEFT);
-                nk_layout_row_dynamic(nuklear, 25, 1);
-                if(nk_combo_begin_color(nuklear, &colors, bgcolor, 400)) {
-                    nk_layout_row_dynamic(nuklear, 120, 1);
-                    bgcolor = nk_color_picker(nuklear, bgcolor, NK_RGBA);
-                    nk_layout_row_dynamic(nuklear, 25, 1);
-                    bgcolor.r = (nk_byte)nk_propertyi(nuklear, "R", 0, bgcolor.r, 255, 1, 1);
-                    bgcolor.g = (nk_byte)nk_propertyi(nuklear, "G", 0, bgcolor.g, 255, 1, 1);
-                    bgcolor.b = (nk_byte)nk_propertyi(nuklear, "B", 0, bgcolor.b, 255, 1, 1);
-                    bgcolor.a = (nk_byte)nk_propertyi(nuklear, "A", 0, bgcolor.a, 255, 1, 1);
-                    nk_combo_end(nuklear);
-                }
-            }
-            nk_end(nuklear);
-        }
-
-        glClear(GL_COLOR_BUFFER_BIT);
-        {
-            float bgcolorUB[4];
-            nk_color_fv(bgcolorUB, bgcolor);
-            glClearColor(bgcolorUB[0], bgcolorUB[1], bgcolorUB[2], bgcolorUB[3]);
-        }
-        nk_glfw_frame_render();
-        glfwSwapBuffers(window);
-    }
-
+static void CleanupNuklear() {
     nk_glfw_shutdown();
     glfwTerminate();
-    return 0;
 }
+
+//==================================================================================================================================
+static GLuint *InitResrouces_Icons() {
+    GLuint *handles = malloc(sizeof(GLuint) * 10);
+    if(!TextureLoad("resource/icon/edit.png",     &(handles[TOOL_EDIT    ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/place.png",    &(handles[TOOL_PLACE   ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/inspect.png",  &(handles[TOOL_INSPECT ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/settings.png", &(handles[TOOL_SETTINGS]), NULL, NULL)) { free(handles); return NULL; }
+
+    if(!TextureLoad("resource/icon/erase.png",  &(handles[PLACE_ERASE ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/door.png",   &(handles[PLACE_DOOR  ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/spawn.png",  &(handles[PLACE_SPAWN ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/key.png",    &(handles[PLACE_KEY   ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/weapon.png", &(handles[PLACE_WEAPON]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/ammo.png",   &(handles[PLACE_AMMO  ]), NULL, NULL)) { free(handles); return NULL; }
+    if(!TextureLoad("resource/icon/enemy.png",  &(handles[PLACE_ENEMY ]), NULL, NULL)) { free(handles); return NULL; }
+    return handles;
+}
+
+static GLuint *InitResources_Textures() {
+    char buff[128];
+    int width, height;
+    GLuint *handles = malloc(sizeof(GLuint) * 65);
+
+    for(int index=0; index<65; index++) {
+        snprintf(buff, 128, "textures/%02d.png", index);
+        if(!TextureLoad(buff, &handles[index], &width, &height)) {
+            fprintf(stderr, "ERROR: Unable to read texture file \"%s\".\n", buff);
+            free(handles);
+            return NULL;
+        }
+        if((width != 64) || (height != 64)) {
+            fprintf(stderr, "ERROR: Texture file \"%s\" is wrong dimensions (%dx%d != 64x64).\n", buff, width, height);
+            free(handles);
+            return NULL;
+        }
+    }
+
+    return handles;
+}
+
+static bool InitResources() {
+    state.icons = InitResrouces_Icons();
+    if(!state.icons) { fprintf(stderr, "ERROR: Missing icon file(s).\n"); return false; }
+
+    state.textures = InitResources_Textures();
+    if(!state.textures) { fprintf(stderr, "ERROR: Missing texture file(s).\n"); return false; }
+
+    return true;
+}
+
+static void CleanupResources() {
+    glDeleteTextures(10, state.icons);    free(state.icons);
+    glDeleteTextures(65, state.textures); free(state.textures);
+}
+
+//==================================================================================================================================
