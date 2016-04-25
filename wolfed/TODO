@@ -1,0 +1,4 @@
+Reset inspectTileX, inpsectTileY when map New/Open
+Resolve TODO, DEBUG, ...
+Enforce Limits (entity count)
+escape exits dialog / dialogs implemented properly
