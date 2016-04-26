@@ -33,6 +33,14 @@ typedef enum {
 
 //==================================================================================================================================
 typedef struct {
+    bool showing;
+    char *title;
+    char *message;
+    char input[128];
+    void (*callback)(bool okay);
+} PromptDialog;
+
+typedef struct {
     GLFWwindow *window;
     struct nk_context *nuklear;
 
@@ -49,7 +57,8 @@ typedef struct {
     int dataLeft, dataTop, dataWidth, dataHeight;
 
     bool isTextEditing;
-    int shownDialog;
+    char *errorMessage;
+    PromptDialog prompt;
 } WolfEdState;
 
 //==================================================================================================================================
@@ -65,6 +74,9 @@ void DrawUI(void);
 // event.c
 void EventError(const char *format, ...);
 void EventResized(GLFWwindow *window, int width, int height);
+void EventKey(GLFWwindow *window, int key, int code, int action, int mods);
+void EventCanvasTranslate(int left, int up, int right, int down);
+void EventExit(void);
 void EventMapLoad(const char *name);
 void EventMapNew(void);
 void EventMapSave(const char *name);

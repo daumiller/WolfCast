@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "library/nuklear_glfw.h"
 #include "wolfed.h"
 #include "../../shared/stdint.h"
@@ -5,9 +6,10 @@
 //==================================================================================================================================
 #define NUK state.nuklear
 
-#define WALL_TYPE(y,x)    state.map->wallGrid[y][x]
-#define ENTITY_INDEX(y,x) state.map->entityGrid[y][x]
-#define ENTITY_TYPE(y,x)  state.map->entity[state.map->entityGrid[y][x] - 1]->type
+#define WALL_TYPE(y,x)     state.map->wallGrid[y][x]
+#define ENTITY_INDEX(y,x)  state.map->entityGrid[y][x]
+#define ENTITY_OBJECT(y,x) state.map->entity[ENTITY_INDEX(y, x) - 1]
+#define ENTITY_TYPE(y,x)   ENTITY_OBJECT(y,x)->type
 
 static void DrawCanvas(void);
 static void DrawSidebar(void);
@@ -16,6 +18,8 @@ static void DrawSidebar_Edit(void);
 static void DrawSidebar_Place(void);
 static void DrawSidebar_Inspect(void);
 static void DrawSidebar_Settings(void);
+static void DrawErrorDialog(void);
+static void DrawPromptDialog(void);
 
 //==================================================================================================================================
 static int width, height, pixelWidth, pixelHeight;
@@ -33,10 +37,19 @@ void DrawInit() {
 
 //==================================================================================================================================
 void DrawUI() {
+    state.isTextEditing = false;
     nk_glfw_sizes(&width, &height, &pixelWidth, &pixelHeight);
 
-    DrawCanvas();
-    DrawSidebar();
+    // shittiest modal method ever...
+    // (nk_begin_popup only works from within a window, and only blocks input to that one, single, window)
+    if(state.errorMessage) {
+        DrawErrorDialog();
+    } else if(state.prompt.showing) {
+        DrawPromptDialog();
+    } else {
+        DrawCanvas();
+        DrawSidebar();
+    }
 }
 
 //==================================================================================================================================
@@ -56,10 +69,6 @@ static void DrawCanvas() {
         buttonPadding = NUK->style.button.padding;
         NUK->style.window.spacing = nk_vec2(0.0f, 0.0f);
         NUK->style.button.padding = nk_vec2(1.0f, 1.0f);
-
-        // nk_layout_row_dynamic(NUK, 30, 1);
-        // nk_labelf(NUK, NK_TEXT_ALIGN_LEFT, "View: %d x %d", state.viewWidth, state.viewHeight);
-        // nk_labelf(NUK, NK_TEXT_ALIGN_LEFT, "Data: %d x %d", state.dataWidth, state.dataHeight);
 
         nk_layout_row_static(NUK, CANVAS_BLOCK_SIZE-2, CANVAS_BLOCK_SIZE-2, state.viewWidth);
 
@@ -149,6 +158,7 @@ static void DrawSidebar_Place() {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+static const char *EntityDoorSecurity[] = { "None", "Red", "Yellow", "Blue" };
 static void DrawSidebar_Inspect() {
     uint8 wallType = WALL_TYPE(state.selectedInspectY, state.selectedInspectX);
 
@@ -182,144 +192,118 @@ static void DrawSidebar_Inspect() {
         nk_button_image(NUK, nk_image_id(state.icons[entityType]), NK_BUTTON_DEFAULT);
 
         nk_layout_row_dynamic(NUK, 16.0f, 1);
-        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+        nk_label(NUK, "", NK_TEXT_ALIGN_LEFT);
 
-        nk_layout_row_dynamic(NUK, 12.0f, 1);
         if((entityType == ENTITY_TYPE_SPAWN) || (entityType == ENTITY_TYPE_ENEMY)) {
-            nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Facing");
+            int facing = (int)ENTITY_OBJECT(state.selectedInspectY, state.selectedInspectX)->facing;
+
+            nk_layout_row_dynamic(NUK, 12.0f, 1);
+            nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Facing %d°", facing);
+            
+            nk_layout_row_dynamic(NUK, 24.0f, 1);
+            facing = nk_propertyi(NUK, "", 0, facing, 359, 5, 5);
+            ENTITY_OBJECT(state.selectedInspectY, state.selectedInspectX)->facing = (double)facing;
+
         } else if(entityType == ENTITY_TYPE_DOOR) {
+            int security = (int)ENTITY_OBJECT(state.selectedInspectY, state.selectedInspectX)->flags;
+
+            nk_layout_row_dynamic(NUK, 12.0f, 1);
             nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Security");
-        }
-    }
 
-}
-
-/*
-void DrawSidebarInspect() {
-
-    ImGui::Text("");
-    ImGui::Text("Tile: (%d, %d)", state.inspectTileX, state.inspectTileY);
-    ImGui::Text("");
-
-    ImGui::Columns(2, "Details", false);
-    ImGui::Text("Wall %02d", wall);
-    ImGui::ImageButton((void *)(long)state.tiles[wall], ImVec2(64, 64), ImVec2(0,0), ImVec2(1,1), 0);
-    ImGui::NextColumn();
-    ImGui::Text("%s", entityName);
-    if(entityType > 0) {
-        ImGui::ImageButton((void *)(long)state.icons[entityType], ImVec2(64, 64), ImVec2(0,0), ImVec2(1,1), 0);
-
-        ImGui::Columns(1);
-        ImGui::Text("");
-        if((entityType == ENTITY_TYPE_SPAWN) || (entityType == ENTITY_TYPE_ENEMY)) {
-            ImGui::Text("Facing");
-            int facing = (int)state.map->entity[entityIndex]->facing;
-            if(ImGui::SliderInt("", &facing, 0, 359, "%.f°")) {
-                state.map->entity[entityIndex]->facing = (double)facing;
-            }
-        } else if(entityType == ENTITY_TYPE_DOOR) {
-            ImGui::Text("Security");
-            int security = state.map->entity[entityIndex]->flags;
-            if(ImGui::Combo("", &security, "None\0Red\0Yellow\0Blue\0\0", 4)) {
-                state.map->entity[entityIndex]->flags = security;
-            }
+            nk_layout_row_dynamic(NUK, 24.0f, 1);
+            security = nk_combo(NUK, EntityDoorSecurity, 4, security, 16);
+            ENTITY_OBJECT(state.selectedInspectY, state.selectedInspectX)->flags = (uint32)security;
         }
     }
 }
-*/
-
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 static void DrawSidebar_Settings() {
+    char idBuffer  [256]; strncpy(idBuffer,   state.map->id  , 256); int idLength   = strlen(idBuffer);
+    char nameBuffer[256]; strncpy(nameBuffer, state.map->name, 256); int nameLength = strlen(nameBuffer);
 
+    nk_layout_row_dynamic(NUK, 16.0f, 1);
+    nk_label(NUK, "", NK_TEXT_ALIGN_LEFT);
+    nk_label(NUK, "Map ID", NK_TEXT_ALIGN_CENTERED);
+    nk_layout_row_dynamic(NUK, 24.0f, 1);
+    if(nk_edit_string(NUK, NK_EDIT_SIMPLE | NK_EDIT_AUTO_SELECT, idBuffer, &idLength, 255, nk_filter_default) & NK_EDIT_ACTIVE) {
+        state.isTextEditing = true;
+    }
+    idBuffer[idLength] = 0x00;
+
+    nk_layout_row_dynamic(NUK, 16.0f, 1);
+    nk_label(NUK, "", NK_TEXT_ALIGN_LEFT);
+    nk_label(NUK, "Map Name", NK_TEXT_ALIGN_CENTERED);
+    nk_layout_row_dynamic(NUK, 24.0f, 1);
+    if(nk_edit_string(NUK, NK_EDIT_SIMPLE | NK_EDIT_AUTO_SELECT, nameBuffer, &nameLength, 255, nk_filter_default) & NK_EDIT_ACTIVE) {
+        state.isTextEditing = true;
+    }
+    nameBuffer[nameLength] = 0x00;
+
+    if(strcmp(idBuffer, state.map->id) != 0) {
+        if(state.map->id) { free(state.map->id); }
+        state.map->id = strdup(idBuffer);
+    }
+
+    if(strcmp(nameBuffer, state.map->name) != 0) {
+        if(state.map->name) { free(state.map->name); }
+        state.map->name = strdup(nameBuffer);
+    }
 }
 
+//==================================================================================================================================
+static void DrawErrorDialog() {
+    static struct nk_panel panel;
+    static struct nk_rect bounds;
 
-/*
-    struct nk_panel layout, colors;
-    static int angle, direction = 0;
-    static char lineBuff[128]; static int lineLen;
+    bounds = nk_rect((width>>1)-160, (height>>1)-64, 320,128);
+    if(nk_begin(NUK, &panel, "ERROR", bounds, NK_WINDOW_TITLE | NK_WINDOW_BORDER_HEADER | NK_WINDOW_BORDER | NK_WINDOW_CLOSABLE)) {
+        nk_window_set_bounds(NUK, bounds);
 
-    if(nk_begin(nuklear, &layout, "WolfEd", nk_rect(50, 50, 235, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)) {
-        nk_layout_row_static(nuklear, 30, 80, 1);
-        if(nk_button_label(nuklear, "Okay", NK_BUTTON_DEFAULT)) { printf("Okay Then...\n"); }
+        nk_layout_row_dynamic(NUK, 16.0f, 1);
+        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+        nk_label(NUK, state.errorMessage, NK_TEXT_ALIGN_CENTERED);
+        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+    } else {
+        free(state.errorMessage);
+        state.errorMessage = NULL;
+    }
+    nk_end(NUK);
+}
 
-        nk_layout_row_dynamic(nuklear, 30, 2);
-        if(nk_option_label(nuklear, "Left",  direction == 0)) { direction = 0; }
-        if(nk_option_label(nuklear, "Right", direction == 1)) { direction = 1; }
+//==================================================================================================================================
+static void DrawPromptDialog() {
+    static struct nk_panel panel;
+    static struct nk_rect bounds;
 
-        nk_layout_row_dynamic(nuklear, 30, 1);
-        nk_labelf(nuklear, NK_TEXT_LEFT, "Okay then, %08X", 0xDEADBEEF);
+    bounds = nk_rect((width>>1)-160, (height>>1)-90, 320,180);
+    if(nk_begin(NUK, &panel, state.prompt.title, bounds, NK_WINDOW_TITLE | NK_WINDOW_BORDER_HEADER | NK_WINDOW_BORDER)) {
+        nk_window_set_bounds(NUK, bounds);
 
-        nk_layout_row_dynamic(nuklear, 30, 1);
-        nk_edit_string(nuklear, NK_EDIT_SIMPLE, lineBuff, &lineLen, 127, nk_filter_default);
+        nk_layout_row_dynamic(NUK, 14.0f, 1);
+        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+        nk_label(NUK, state.prompt.message, NK_TEXT_ALIGN_CENTERED);
 
-        nk_layout_row_dynamic(nuklear, 25, 1);
-        nk_property_int(nuklear, "Angle: ", 0, &angle, 360, 10, 1);
+        int promptLength = strlen(state.prompt.input);
+        nk_layout_row_dynamic(NUK, 24.0f, 1);
+        int status = nk_edit_string(NUK, NK_EDIT_SIMPLE | NK_EDIT_AUTO_SELECT | NK_EDIT_SIG_ENTER, state.prompt.input, &promptLength, 127, nk_filter_default);
 
-        nk_layout_row_dynamic(nuklear, 20, 1);
-        nk_label(nuklear, "bgcolor: ", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(nuklear, 25, 1);
-        if(nk_combo_begin_color(nuklear, &colors, bgcolor, 400)) {
-            nk_layout_row_dynamic(nuklear, 120, 1);
-            bgcolor = nk_color_picker(nuklear, bgcolor, NK_RGBA);
-            nk_layout_row_dynamic(nuklear, 25, 1);
-            bgcolor.r = (nk_byte)nk_propertyi(nuklear, "R", 0, bgcolor.r, 255, 1, 1);
-            bgcolor.g = (nk_byte)nk_propertyi(nuklear, "G", 0, bgcolor.g, 255, 1, 1);
-            bgcolor.b = (nk_byte)nk_propertyi(nuklear, "B", 0, bgcolor.b, 255, 1, 1);
-            bgcolor.a = (nk_byte)nk_propertyi(nuklear, "A", 0, bgcolor.a, 255, 1, 1);
-            nk_combo_end(nuklear);
+        state.prompt.input[promptLength] = 0x00;
+        if(status & NK_EDIT_ACTIVE) { state.isTextEditing = true; }
+        if(status & NK_EDIT_COMMITED) { state.prompt.callback(true); }
+
+        nk_layout_row_dynamic(NUK, 12.0f, 1);
+        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+
+        nk_layout_row_dynamic(NUK, 24.0f, 2);
+        if(nk_button_label(NUK, "Okay", NK_BUTTON_DEFAULT)) {
+            state.prompt.callback(true);
+        }
+        if(nk_button_label(NUK, "Cancel", NK_BUTTON_DEFAULT)) {
+            state.prompt.callback(false);
         }
     }
-    nk_end(nuklear);
-*/
-
-/*
-    struct nk_panel layout;
-    struct nk_rect bounds = nk_rect(scaleWidth-192, 0, 192, scaleHeight);
-    if(nk_begin(context, &layout, "WolfEditor", bounds, 0)) {
-        nk_window_set_position(context, nk_vec2(bounds.x, bounds.y));
-        static int valToggle = 1;
-        static int valSlide = 20;
-
-        nk_layout_row_dynamic(context, 30, 1);
-        nk_labelf(context, NK_TEXT_ALIGN_LEFT, "scaleWidth: %d", scaleWidth);
-        nk_labelf(context, NK_TEXT_ALIGN_LEFT, "scaleHeigth: %d", scaleHeight);
-
-        nk_layout_row_static(context, 30, 80, 1);
-        if(nk_button_label(context, "OK", NK_BUTTON_DEFAULT)) {
-            printf("You pressed the button\n");
-        }
-
-        nk_layout_row_dynamic(context, 30, 2);
-        if(nk_option_label(context, "Left" , valToggle == 1)) { valToggle = 1; }
-        if(nk_option_label(context, "Right", valToggle == 2)) { valToggle = 2; }
-
-        nk_layout_row_dynamic(context, 22, 1);
-        nk_property_int(context, "Slidey:", 0, &valSlide, 100, 10, 1);
-
-        struct nk_panel combo;
-        nk_layout_row_dynamic(context, 20, 1);
-        nk_label(context, "BGColor:", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(context, 25, 1);
-        if(nk_combo_begin_color(context, &combo, bgcolor, 400)) {
-            nk_layout_row_dynamic(context, 120, 1);
-            bgcolor = nk_color_picker(context, bgcolor, NK_RGBA);
-            nk_layout_row_dynamic(context, 25, 1);
-            bgcolor.r = (nk_byte)nk_propertyi(context, "#R:", 0, bgcolor.r, 255, 1, 1);
-            bgcolor.g = (nk_byte)nk_propertyi(context, "#G:", 0, bgcolor.g, 255, 1, 1);
-            bgcolor.b = (nk_byte)nk_propertyi(context, "#B:", 0, bgcolor.b, 255, 1, 1);
-            bgcolor.a = (nk_byte)nk_propertyi(context, "#A:", 0, bgcolor.a, 255, 1, 1);
-            nk_combo_end(context);
-        }
-
-        nk_layout_row_static(context, 48, 48, 3);
-        nk_button_image(context, texture1, NK_BUTTON_DEFAULT);
-        nk_button_image(context, texture2, NK_BUTTON_DEFAULT);
-        nk_button_image(context, texture3, NK_BUTTON_DEFAULT);
-
-        nk_end(context);
-    }
-*/
+    nk_end(NUK);
+}
 
 //==================================================================================================================================

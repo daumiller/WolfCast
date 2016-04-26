@@ -56,7 +56,7 @@ static bool InitNuklear() {
 
     state.nuklear = nk_glfw_init(state.window, true, false);
     if(!state.nuklear) { fprintf(stderr, "ERROR: nk_glfw_init() failed.\n"); return false; }
-    glfwSetKeyCallback            (state.window, nk_glfw_callback_key);
+    glfwSetKeyCallback            (state.window, EventKey);
     glfwSetCharCallback           (state.window, nk_glfw_callback_char);
     glfwSetScrollCallback         (state.window, nk_glfw_callback_scroll);
     glfwSetFramebufferSizeCallback(state.window, nk_glfw_callback_resize);
