@@ -21,6 +21,8 @@ static uint16 **gridAlloc16(int width, int height);
 static char *stringRead(FILE *file);
 static void stringWrite(const char *string, FILE *file);
 
+static void RelocateEntities(Map *map);
+
 //==================================================================================================================================
 Map *MapLoad(const char *path) {
     FILE *file = fopen(path, "rb");
@@ -134,6 +136,7 @@ void MapExpand(Map *map, int left, int top, int right, int bottom) {
     gridFree16(map->entityGrid, map->blockHeight); map->entityGrid = newEntityGrid;
     map->blockWidth  = newWidth;  map->width  = newWidth  << UNIT_BLOCK_SHIFT;
     map->blockHeight = newHeight; map->height = newHeight << UNIT_BLOCK_SHIFT;
+    RelocateEntities(map);
 }
 
 void MapContract(Map *map) {
@@ -175,6 +178,7 @@ void MapContract(Map *map) {
     gridFree16(map->entityGrid, map->blockHeight); map->entityGrid = newEntityGrid;
     map->blockWidth  = newWidth;  map->width  = newWidth  << UNIT_BLOCK_SHIFT;
     map->blockHeight = newHeight; map->height = newHeight << UNIT_BLOCK_SHIFT;
+    RelocateEntities(map);
 }
 
 int MapEntityAdd(Map *map, int x, int y, int type) {
@@ -189,9 +193,9 @@ int MapEntityAdd(Map *map, int x, int y, int type) {
     map->entity = realloc(map->entity, sizeof(Entity *) * map->entityCount);
     map->entity[map->entityCount - 1] = entity;
 
-    uint16 index = map->entityCount - 1;
     int tileX = x >> UNIT_BLOCK_SHIFT;
     int tileY = y >> UNIT_BLOCK_SHIFT;
+    uint16 index = map->entityCount - 1;
     map->entityGrid[tileY][tileX] = index + 1;
 
     return index;
@@ -308,4 +312,18 @@ static void stringWrite(const char *string, FILE *file) {
     uint8 len = (uint8)(strlen(string) & 0xFF);
     fwrite(&len, 1, 1, file);
     fwrite(string, len, 1, file);
+}
+
+//==================================================================================================================================
+void RelocateEntities(Map *map) {
+    Entity *entity;
+
+    for(int yy=0; yy < map->blockHeight; yy++) {
+        for(int xx=0; xx < map->blockWidth; xx++) {
+            if(map->entityGrid[yy][xx] == 0) { continue; }
+            entity = map->entity[map->entityGrid[yy][xx] - 1];
+            entity->y = (double)((yy << UNIT_BLOCK_SHIFT) + ((int)entity->y % UNITS_PER_BLOCK));
+            entity->x = (double)((xx << UNIT_BLOCK_SHIFT) + ((int)entity->x % UNITS_PER_BLOCK));
+        }
+    }
 }
