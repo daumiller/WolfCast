@@ -1,9 +1,13 @@
 #include "library/nuklear_glfw.h"
 #include "wolfed.h"
+#include "../../shared/stdint.h"
 
 //==================================================================================================================================
 #define NUK state.nuklear
-#define SIDEBAR_WIDTH 200
+
+#define WALL_TYPE(y,x)    state.map->wallGrid[y][x]
+#define ENTITY_INDEX(y,x) state.map->entityGrid[y][x]
+#define ENTITY_TYPE(y,x)  state.map->entity[state.map->entityGrid[y][x] - 1]->type
 
 static void DrawCanvas(void);
 static void DrawSidebar(void);
@@ -22,6 +26,9 @@ void DrawInit() {
     colorUnselected = nk_rgb(255,255,255);
     colorSelected   = nk_rgb(  0,200,240);
     colorErase      = nk_rgb(146,  0,  0);
+
+    glfwGetWindowSize(state.window, &width, &height);
+    EventResized(state.window, width, height);
 }
 
 //==================================================================================================================================
@@ -33,21 +40,53 @@ void DrawUI() {
 }
 
 //==================================================================================================================================
+#define BTN_CANVAS_WALL(x)  nk_button_image(NUK, nk_image_id(state.textures[x]), NK_BUTTON_DEFAULT)
+#define BTN_CANVAS_PLACE(x) nk_button_image(NUK, nk_image_id(state.icons[x]), NK_BUTTON_DEFAULT)
+
 static void DrawCanvas() {
     static struct nk_panel panel;
     static struct nk_rect bounds;
-    static struct nk_vec2 spacing;
+    static struct nk_vec2 windowSpacing, buttonPadding;
 
     bounds = nk_rect(0, 0, width-SIDEBAR_WIDTH, height);
     if(nk_begin(NUK, &panel, "Canvas", bounds, 0)) {
         nk_window_set_bounds(NUK, bounds);
-        spacing = NUK->style.window.spacing;
+
+        windowSpacing = NUK->style.window.spacing;
+        buttonPadding = NUK->style.button.padding;
         NUK->style.window.spacing = nk_vec2(0.0f, 0.0f);
+        NUK->style.button.padding = nk_vec2(1.0f, 1.0f);
 
-        nk_layout_row_dynamic(NUK, 30, 1);
-        nk_labelf(NUK, NK_TEXT_ALIGN_LEFT, "Canvas!");
+        // nk_layout_row_dynamic(NUK, 30, 1);
+        // nk_labelf(NUK, NK_TEXT_ALIGN_LEFT, "View: %d x %d", state.viewWidth, state.viewHeight);
+        // nk_labelf(NUK, NK_TEXT_ALIGN_LEFT, "Data: %d x %d", state.dataWidth, state.dataHeight);
 
-        NUK->style.window.spacing = spacing;
+        nk_layout_row_static(NUK, CANVAS_BLOCK_SIZE-2, CANVAS_BLOCK_SIZE-2, state.viewWidth);
+
+        int maxDataX = state.dataLeft + state.dataWidth - 1;
+        int maxDataY = state.dataTop + state.dataHeight - 1;
+
+        int dataX, dataY, viewX, viewY; uint16 entityType;
+        for(viewY=0; viewY < state.viewHeight; viewY++) {
+            dataY = state.viewTop + viewY;
+            for(viewX=0; viewX < state.viewWidth; viewX++) {
+                dataX = state.viewLeft + viewX;
+
+                if((state.dataTop <= dataY) && (dataY <= maxDataY) && (state.dataLeft <= dataX) && (dataX <= maxDataX)) {
+                    if(((state.selectedTool == TOOL_PLACE) || (state.selectedTool == TOOL_INSPECT)) && (ENTITY_INDEX(dataY, dataX) > 0)) {
+                        entityType = ENTITY_TYPE(dataY, dataX);
+                        if(BTN_CANVAS_PLACE(entityType)) { EventCanvasData(dataX, dataY); }
+                    } else {
+                        if(BTN_CANVAS_WALL(WALL_TYPE(dataY,dataX))) { EventCanvasData(dataX, dataY); }
+                    }
+                } else {
+                    if(BTN_CANVAS_WALL(0)) { EventCanvasView(dataX, dataY); }
+                }
+            }
+        }
+
+        NUK->style.window.spacing = windowSpacing;
+        NUK->style.button.padding = buttonPadding;
     }
     nk_end(NUK);
 }
@@ -111,8 +150,84 @@ static void DrawSidebar_Place() {
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 static void DrawSidebar_Inspect() {
+    uint8 wallType = WALL_TYPE(state.selectedInspectY, state.selectedInspectX);
+
+    uint8 entityType = 0;
+    const char *entityName = "";
+    if(ENTITY_INDEX(state.selectedInspectY, state.selectedInspectX) > 0) {
+        entityType = ENTITY_TYPE(state.selectedInspectY, state.selectedInspectX);
+        switch(entityType) {
+            case ENTITY_TYPE_DOOR   : entityName = "Door";       break;
+            case ENTITY_TYPE_SPAWN  : entityName = "Spawn";      break;
+            case ENTITY_TYPE_KEY    : entityName = "Key";        break;
+            case ENTITY_TYPE_WEAPON : entityName = "Weapon";     break;
+            case ENTITY_TYPE_AMMO   : entityName = "Ammunition"; break;
+            case ENTITY_TYPE_ENEMY  : entityName = "Enemy";      break;
+        }
+    }
+
+    nk_layout_row_dynamic(NUK, 16.0f, 1);
+    nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+    nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Block: (%d, %d)", state.selectedInspectX, state.selectedInspectY);
+    nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+
+    float colSize = (float)((SIDEBAR_WIDTH - 20) >> 1);
+    nk_layout_row_static(NUK, 14.0f, colSize, 2);
+    nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Wall %02d", wallType);
+    nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "%s", entityName);
+
+    nk_layout_row_static(NUK, colSize, colSize, 2);
+    nk_button_image(NUK, nk_image_id(state.textures[wallType]), NK_BUTTON_DEFAULT);
+    if(ENTITY_INDEX(state.selectedInspectY, state.selectedInspectX) > 0) {
+        nk_button_image(NUK, nk_image_id(state.icons[entityType]), NK_BUTTON_DEFAULT);
+
+        nk_layout_row_dynamic(NUK, 16.0f, 1);
+        nk_label(NUK, "", NK_TEXT_ALIGN_CENTERED);
+
+        nk_layout_row_dynamic(NUK, 12.0f, 1);
+        if((entityType == ENTITY_TYPE_SPAWN) || (entityType == ENTITY_TYPE_ENEMY)) {
+            nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Facing");
+        } else if(entityType == ENTITY_TYPE_DOOR) {
+            nk_labelf(NUK, NK_TEXT_ALIGN_CENTERED, "Security");
+        }
+    }
 
 }
+
+/*
+void DrawSidebarInspect() {
+
+    ImGui::Text("");
+    ImGui::Text("Tile: (%d, %d)", state.inspectTileX, state.inspectTileY);
+    ImGui::Text("");
+
+    ImGui::Columns(2, "Details", false);
+    ImGui::Text("Wall %02d", wall);
+    ImGui::ImageButton((void *)(long)state.tiles[wall], ImVec2(64, 64), ImVec2(0,0), ImVec2(1,1), 0);
+    ImGui::NextColumn();
+    ImGui::Text("%s", entityName);
+    if(entityType > 0) {
+        ImGui::ImageButton((void *)(long)state.icons[entityType], ImVec2(64, 64), ImVec2(0,0), ImVec2(1,1), 0);
+
+        ImGui::Columns(1);
+        ImGui::Text("");
+        if((entityType == ENTITY_TYPE_SPAWN) || (entityType == ENTITY_TYPE_ENEMY)) {
+            ImGui::Text("Facing");
+            int facing = (int)state.map->entity[entityIndex]->facing;
+            if(ImGui::SliderInt("", &facing, 0, 359, "%.f°")) {
+                state.map->entity[entityIndex]->facing = (double)facing;
+            }
+        } else if(entityType == ENTITY_TYPE_DOOR) {
+            ImGui::Text("Security");
+            int security = state.map->entity[entityIndex]->flags;
+            if(ImGui::Combo("", &security, "None\0Red\0Yellow\0Blue\0\0", 4)) {
+                state.map->entity[entityIndex]->flags = security;
+            }
+        }
+    }
+}
+*/
+
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 static void DrawSidebar_Settings() {

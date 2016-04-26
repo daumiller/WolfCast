@@ -7,8 +7,10 @@
 #include "../../shared/map.h"
 
 //==================================================================================================================================
-#define STARTUP_WIDTH  960
-#define STARTUP_HEIGHT 720
+#define STARTUP_WIDTH    960
+#define STARTUP_HEIGHT   720
+#define SIDEBAR_WIDTH    200
+#define CANVAS_BLOCK_SIZE 34
 #define PROGRAM_NAME   "WolfEd"
 
 //==================================================================================================================================
@@ -35,7 +37,7 @@ typedef struct {
     struct nk_context *nuklear;
 
     GLuint *icons, *textures;
-    const char *mapPath;
+    char *mapName;
     Map *map;
 
     ToolType      selectedTool;
@@ -61,9 +63,12 @@ void DrawUI(void);
 
 //==================================================================================================================================
 // event.c
-void EventMapLoad(const char *path);
+void EventError(const char *format, ...);
+void EventResized(GLFWwindow *window, int width, int height);
+void EventMapLoad(const char *name);
 void EventMapNew(void);
-void EventMapSave(const char *path);
-
+void EventMapSave(const char *name);
+void EventCanvasView(int x, int y);
+void EventCanvasData(int x, int y);
 
 #endif //WOLFED_H

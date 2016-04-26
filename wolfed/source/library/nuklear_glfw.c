@@ -243,7 +243,7 @@ void nk_glfw_render(void) {
             if(!currCommand->elem_count) { continue; }
 
             clipX = (GLint)(scaleX * (double)currCommand->clip_rect.x);
-            clipY = (GLint)(nk_glfw.height - (int)(scaleY * (double)(currCommand->clip_rect.y + currCommand->clip_rect.h)));
+            clipY = (GLint)(nk_glfw.pixelHeight - (int)(scaleY * (double)(currCommand->clip_rect.y + currCommand->clip_rect.h)));
             clipW = (GLint)(scaleX * (double)currCommand->clip_rect.w);
             clipH = (GLint)(scaleY * (double)currCommand->clip_rect.h);
 

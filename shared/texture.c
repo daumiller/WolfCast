@@ -8,10 +8,12 @@
 
 static bool PngLoad(const char *path, uint8 **data, int *width, int *height, int *bytes) {
     *data = stbi_load(path, width, height, bytes, 0);
+    if(!*data) {
+        *data = NULL;
+        return false;
+    }
 
     if((*bytes != 3) && (*bytes != 4)) {
-        fprintf(stderr, "ERROR: Unable to load texture \"%s\".\n", path);
-        fprintf(stderr, "       Not RGB or RGBA (may be paletted).\n");
         stbi_image_free(*data);
         *data = NULL;
         return false;

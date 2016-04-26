@@ -5,9 +5,9 @@
 #include <GLFW/glfw3.h>
 #include "nuklear.h"
 
-#define SIZE_BUFFER_VERTEX  (512 * 1024)
-#define SIZE_BUFFER_ELEMENT (128 * 1024)
-#define SIZE_BUFFER_TEXT    (256 * 4)
+#define SIZE_BUFFER_VERTEX  (2048 * 1024)
+#define SIZE_BUFFER_ELEMENT ( 512 * 1024)
+#define SIZE_BUFFER_TEXT    ( 256 *    4)
 
 struct nk_context *nk_glfw_init(GLFWwindow *window, bool antiAlias, bool installCallbacks);
 void nk_glfw_shutdown(void);

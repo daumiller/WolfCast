@@ -21,14 +21,17 @@ int main(int argc, char ** argv) {
 
     if(!InitNuklear())   { return -1; }
     if(!InitResources()) { return -1; }
-
-    (argc > 1) ? EventMapLoad(argv[1]) : EventMapNew();
-
+    
     DrawInit();
+    (argc > 1) ? EventMapLoad(argv[1]) : EventMapNew();
+    state.nuklear->style.window.padding = nk_vec2(0.0f, 0.0f);
+
     MainLoop();
 
     CleanupResources();
     CleanupNuklear();
+    if(state.mapName) { free(state.mapName); }
+    if(state.map) { MapFree(state.map); }
     return 0;
 }
 
@@ -57,6 +60,7 @@ static bool InitNuklear() {
     glfwSetCharCallback           (state.window, nk_glfw_callback_char);
     glfwSetScrollCallback         (state.window, nk_glfw_callback_scroll);
     glfwSetFramebufferSizeCallback(state.window, nk_glfw_callback_resize);
+    glfwSetWindowSizeCallback     (state.window, EventResized);
 
     nk_glfw_font_begin(NULL);
     nk_glfw_font_end();
