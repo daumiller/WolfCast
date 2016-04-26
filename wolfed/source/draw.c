@@ -287,6 +287,24 @@ static void DrawPromptDialog() {
         int promptLength = strlen(state.prompt.input);
         nk_layout_row_dynamic(NUK, 24.0f, 1);
         int status = nk_edit_string(NUK, NK_EDIT_SIMPLE | NK_EDIT_AUTO_SELECT | NK_EDIT_SIG_ENTER, state.prompt.input, &promptLength, 127, nk_filter_default);
+        // active this nk_edit_string at startup
+        if(!NUK->current->edit.active) {
+            NUK->current->edit.active = true;
+            NUK->current->edit.insert_mode = nk_true;
+            NUK->text_edit.undo.undo_point = 0;
+            NUK->text_edit.undo.undo_char_point = 0;
+            NUK->text_edit.undo.redo_point = NK_TEXTEDIT_UNDOSTATECOUNT;
+            NUK->text_edit.undo.redo_char_point = NK_TEXTEDIT_UNDOCHARCOUNT;
+            NUK->text_edit.select_end = NUK->current->edit.sel_end = 0;
+            NUK->text_edit.cursor = 0;
+            NUK->text_edit.has_preferred_x = 0;
+            NUK->text_edit.preferred_x = 0;
+            NUK->text_edit.cursor_at_end_of_line = 0;
+            NUK->text_edit.initialized = 1;
+            NUK->text_edit.single_line = nk_true;
+            NUK->text_edit.insert_mode = 0;
+            NUK->text_edit.filter = nk_filter_default;
+        }
 
         state.prompt.input[promptLength] = 0x00;
         if(status & NK_EDIT_ACTIVE) { state.isTextEditing = true; }
