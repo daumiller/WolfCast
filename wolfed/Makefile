@@ -10,7 +10,7 @@ SOURCES =                         \
 	../shared/library/stb_image.c \
 	../shared/texture.c           \
 	../shared/map.c               \
-	source/handle.c               \
+	source/event.c                \
 	source/draw.c                 \
 	source/main.c
 

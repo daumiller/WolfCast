@@ -613,6 +613,7 @@ NK_API int                      nk_button_label(struct nk_context *ctx, const ch
 NK_API int                      nk_button_color(struct nk_context*, struct nk_color, enum nk_button_behavior);
 NK_API int                      nk_button_symbol(struct nk_context*, enum nk_symbol_type, enum nk_button_behavior);
 NK_API int                      nk_button_image(struct nk_context*, struct nk_image img, enum nk_button_behavior);
+NK_API int                      nk_button_image_colored(struct nk_context*, struct nk_image img, enum nk_button_behavior, struct nk_color color);
 NK_API int                      nk_button_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags text_alignment, enum nk_button_behavior);
 NK_API int                      nk_button_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment, enum nk_button_behavior);
 NK_API int                      nk_button_image_label(struct nk_context*, struct nk_image img, const char*, nk_flags text_alignment, enum nk_button_behavior);
@@ -1550,6 +1551,7 @@ struct nk_command_image {
     struct nk_command header;
     short x, y;
     unsigned short w, h;
+    struct nk_color color;
     struct nk_image img;
 };
 
@@ -1613,6 +1615,7 @@ NK_API void nk_fill_polygon(struct nk_command_buffer*, float*, int point_count,
 /* misc */
 NK_API void nk_push_scissor(struct nk_command_buffer*, struct nk_rect);
 NK_API void nk_draw_image(struct nk_command_buffer*, struct nk_rect, const struct nk_image*);
+NK_API void nk_draw_image_colored(struct nk_command_buffer*, struct nk_rect, const struct nk_image*, struct nk_color color);
 NK_API void nk_draw_text(struct nk_command_buffer*, struct nk_rect,
                     const char *text, int len, const struct nk_user_font*,
                     struct nk_color, struct nk_color);
@@ -5435,6 +5438,31 @@ nk_draw_image(struct nk_command_buffer *b, struct nk_rect r,
     cmd->y = (short)r.y;
     cmd->w = (unsigned short)NK_MAX(0, r.w);
     cmd->h = (unsigned short)NK_MAX(0, r.h);
+    cmd->color = nk_rgb(255, 255, 255);
+    cmd->img = *img;
+}
+
+NK_API void
+nk_draw_image_colored(struct nk_command_buffer *b, struct nk_rect r,
+    const struct nk_image *img, struct nk_color color)
+{
+    struct nk_command_image *cmd;
+    NK_ASSERT(b);
+    if (!b) return;
+    if (b->use_clipping) {
+        const struct nk_rect *c = &b->clip;
+        if (!NK_INTERSECT(r.x, r.y, r.w, r.h, c->x, c->y, c->w, c->h))
+            return;
+    }
+
+    cmd = (struct nk_command_image*)
+        nk_command_buffer_push(b, NK_COMMAND_IMAGE, sizeof(*cmd));
+    if (!cmd) return;
+    cmd->x = (short)r.x;
+    cmd->y = (short)r.y;
+    cmd->w = (unsigned short)NK_MAX(0, r.w);
+    cmd->h = (unsigned short)NK_MAX(0, r.h);
+    cmd->color = color;
     cmd->img = *img;
 }
 
@@ -6606,7 +6634,7 @@ nk_convert(struct nk_context *ctx, struct nk_buffer *cmds,
         case NK_COMMAND_IMAGE: {
             const struct nk_command_image *i = (const struct nk_command_image*)cmd;
             nk_draw_list_add_image(&ctx->draw_list, i->img, nk_rect(i->x, i->y, i->w, i->h),
-                nk_rgb(255, 255, 255));
+                i->color);
         } break;
         default: break;
         }
@@ -11556,6 +11584,15 @@ nk_draw_button_image(struct nk_command_buffer *out,
     nk_draw_image(out, *content, img);
 }
 
+NK_INTERN void
+nk_draw_button_image_colored(struct nk_command_buffer *out,
+    const struct nk_rect *bounds, const struct nk_rect *content,
+    nk_flags state, const struct nk_style_button *style, const struct nk_image *img, struct nk_color color)
+{
+    nk_draw_button(out, bounds, state, style);
+    nk_draw_image_colored(out, *content, img, color);
+}
+
 NK_INTERN int
 nk_do_button_image(nk_flags *state,
     struct nk_command_buffer *out, struct nk_rect bounds,
@@ -11582,6 +11619,37 @@ nk_do_button_image(nk_flags *state,
     if (style->draw.button_image)
         style->draw.button_image(out, &bounds, &content, *state, style, &img);
     else nk_draw_button_image(out, &bounds, &content, *state, style, &img);
+    if (style->draw_end)
+        style->draw_end(out, style->userdata);
+    return ret;
+}
+
+NK_INTERN int
+nk_do_button_image_colored(nk_flags *state,
+    struct nk_command_buffer *out, struct nk_rect bounds,
+    struct nk_image img, enum nk_button_behavior b,
+    const struct nk_style_button *style, const struct nk_input *in, struct nk_color color)
+{
+    int ret;
+    struct nk_rect content;
+
+    NK_ASSERT(state);
+    NK_ASSERT(style);
+    NK_ASSERT(out);
+    if (!out || !style || !state)
+        return nk_false;
+
+    ret = nk_do_button(state, out, bounds, style, in, b, &content);
+    content.x += style->image_padding.x;
+    content.y += style->image_padding.y;
+    content.w -= 2 * style->image_padding.x;
+    content.h -= 2 * style->image_padding.y;
+
+    if (style->draw_begin)
+        style->draw_begin(out, style->userdata);
+    if (style->draw.button_image)
+        style->draw.button_image(out, &bounds, &content, *state, style, &img);
+    else nk_draw_button_image_colored(out, &bounds, &content, *state, style, &img, color);
     if (style->draw_end)
         style->draw_end(out, style->userdata);
     return ret;
@@ -17126,6 +17194,35 @@ nk_button_image(struct nk_context *ctx, struct nk_image img,
     in = (state == NK_WIDGET_ROM || layout->flags & NK_WINDOW_ROM) ? 0 : &ctx->input;
     return nk_do_button_image(&ctx->last_widget_state, &win->buffer, bounds,
                 img, behavior, &style->button, in);
+}
+
+NK_API int
+nk_button_image_colored(struct nk_context *ctx, struct nk_image img,
+    enum nk_button_behavior behavior, struct nk_color color)
+{
+    struct nk_window *win;
+    struct nk_panel *layout;
+    const struct nk_input *in;
+    const struct nk_style *style;
+
+    struct nk_rect bounds;
+    enum nk_widget_layout_states state;
+
+    NK_ASSERT(ctx);
+    NK_ASSERT(ctx->current);
+    NK_ASSERT(ctx->current->layout);
+    if (!ctx || !ctx->current || !ctx->current->layout)
+        return 0;
+
+    win = ctx->current;
+    style = &ctx->style;
+    layout = win->layout;
+
+    state = nk_widget(&bounds, ctx);
+    if (!state) return 0;
+    in = (state == NK_WIDGET_ROM || layout->flags & NK_WINDOW_ROM) ? 0 : &ctx->input;
+    return nk_do_button_image_colored(&ctx->last_widget_state, &win->buffer, bounds,
+                img, behavior, &style->button, in, color);
 }
 
 NK_API int
